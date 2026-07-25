@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
-  "name": "license-plate-secure-portal",
+  "name": "license-plate-management",
   // Compatibility date must be 2024-09-23 or later for nodejs_compat to work with @opennextjs/cloudflare.
   "compatibility_date": "2026-07-11",
   "compatibility_flags": [
