@@ -12,12 +12,11 @@ export default function Home() {
               </svg>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Internal Tool</p>
-              <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">車牌查詢入口</h1>
+              <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">溢恩堂車牌查詢入口</h1>
             </div>
           </div>
           <p className="text-slate-500 text-sm sm:text-base mt-3.5 max-w-xl">
-            License Plate Search Portal — quickly look up registered plates, owners, and vehicle details.
+            quickly look up registered plates, owners, and vehicle details.
           </p>
         </div>
       </header>

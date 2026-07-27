@@ -15,15 +15,13 @@ function getNotionClient() {
   return new Client({ auth: process.env.NOTION_API_KEY });
 }
 
-// Simple in-memory cache for the data source id + "車款" select options, so
-// most requests skip straight to the actual search query instead of paying
-// for `databases.retrieve` + `dataSources.retrieve` on every single search.
+// Simple in-memory cache for the data source id, so most requests skip
+// straight to the actual search query instead of paying for
+// `databases.retrieve` on every single search.
 // This is safe as module-level *mutable state*, unlike `process.env` above —
 // there's no cold-start timing issue here since we only ever read/write
 // `schemaCache` from inside the request handler, well after the module has
-// finished loading. Worst case if this staleness bites: a car model renamed
-// or added in Notion in the last few minutes won't be searchable until the
-// cache expires — acceptable for how rarely that changes.
+// finished loading.
 //
 // Scope note: each Cloudflare Workers isolate gets its own copy of this
 // variable (it is NOT a shared/distributed cache across edge locations),
@@ -32,7 +30,28 @@ function getNotionClient() {
 // memory: it's one small, bounded object that gets replaced wholesale on
 // every refresh, never appended to.
 const SCHEMA_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-let schemaCache = null; // { dataSourceId, carModelOptions, fetchedAt }
+let schemaCache = null; // { dataSourceId, fetchedAt }
+
+// Short-lived cache of every row's searchable fields, refreshed far more
+// often than the schema cache above since plates get added/edited in Notion
+// much more frequently than the database's structure changes. See the
+// comment above `normalizePlate` for why we need the raw rows at all instead
+// of asking Notion to filter them for us.
+const ROWS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+let rowsCache = null; // { rows, fetchedAt }
+
+// Plates get entered inconsistently in Notion — some rows have a hyphen
+// (e.g. "ALM-8077"), some don't (e.g. "ALM8077") — and users searching the
+// portal are just as inconsistent about typing the hyphen. Notion's API
+// filters (`equals`/`contains`) only do literal string comparison, so they
+// can't ignore hyphens on their own: a `title.equals` filter for "ALM8077"
+// would never match a stored "ALM-8077", and vice versa. Normalizing both
+// sides the same way (uppercase, strip all hyphens) before comparing means a
+// search matches regardless of which side has the hyphen, or whether either
+// side does at all.
+function normalizePlate(value) {
+  return (value || "").toString().toUpperCase().replace(/-/g, "");
+}
 
 export async function POST(request) {
   try {
@@ -71,12 +90,11 @@ export async function POST(request) {
     const notion = getNotionClient();
 
     let dataSourceId;
-    let carModelOptions;
-    const cacheIsFresh =
+    const schemaCacheIsFresh =
       schemaCache && Date.now() - schemaCache.fetchedAt < SCHEMA_CACHE_TTL_MS;
 
-    if (cacheIsFresh) {
-      ({ dataSourceId, carModelOptions } = schemaCache);
+    if (schemaCacheIsFresh) {
+      ({ dataSourceId } = schemaCache);
     } else {
       // Resolve the data source id for this database (Notion API 2025-09-03+).
       const db = await notion.databases.retrieve({
@@ -89,68 +107,64 @@ export async function POST(request) {
         );
       }
 
-      // "車款" is a Notion `select` property. Critically, Notion's API
-      // rejects the ENTIRE query with a 400 validation_error if a
-      // `select.equals` filter value isn't one of that property's defined
-      // options — it does NOT just treat it as "no match" for that clause
-      // and move on. (This is exactly what was causing every search for a
-      // plate number, e.g. "alm-8077", to fail: it isn't a valid "車款"
-      // option, so Notion rejected the whole OR filter, 車牌/登記人 clauses
-      // included.) So we look up the real option list first and only add
-      // the 車款 clause when `search` actually matches one of them.
-      const dataSource = await notion.dataSources.retrieve({
-        data_source_id: dataSourceId,
-      });
-      carModelOptions =
-        dataSource.properties?.["車款"]?.select?.options?.map(
-          (o) => o.name
-        ) || [];
-
-      schemaCache = { dataSourceId, carModelOptions, fetchedAt: Date.now() };
+      schemaCache = { dataSourceId, fetchedAt: Date.now() };
     }
 
-    const searchMatchesCarModelOption = carModelOptions.includes(search);
+    // Pull every row back and match in JS rather than asking Notion to
+    // filter — see the comment on `normalizePlate` above for why: Notion's
+    // filters can't ignore hyphens, so a server-side filter would miss
+    // plates whenever the hyphen usage in the query doesn't exactly match
+    // what's stored. Paginate through all rows (Notion returns at most 100
+    // per page) and cache the result briefly so repeat searches don't each
+    // re-fetch the whole table.
+    const rowsCacheIsFresh =
+      rowsCache && Date.now() - rowsCache.fetchedAt < ROWS_CACHE_TTL_MS;
 
-    // Default (loose) filter — substring search across the text fields.
-    let orConditions = [
-      { property: "車牌", title: { contains: search } },
-      { property: "登記人", rich_text: { contains: search } },
-    ];
-    if (searchMatchesCarModelOption) {
-      orConditions.push({ property: "車款", select: { equals: search } });
+    let rows;
+    if (rowsCacheIsFresh) {
+      rows = rowsCache.rows;
+    } else {
+      rows = [];
+      let cursor = undefined;
+      do {
+        const page = await notion.dataSources.query({
+          data_source_id: dataSourceId,
+          start_cursor: cursor,
+        });
+        rows = rows.concat(page.results);
+        cursor = page.has_more ? page.next_cursor : undefined;
+      } while (cursor);
+
+      rowsCache = { rows, fetchedAt: Date.now() };
     }
-    let filter = { or: orConditions };
+
+    const normalizedSearch = normalizePlate(search);
 
     // ===== EXACT MATCH & SINGLE RESULT LIMIT FOR SECURITY =====
-    // Overrides the loose filter above so only an exact string match
-    // qualifies. TO REVERT TO LOOSE SEARCH: delete this block (down to the
-    // matching END marker) — the `filter` built above will be used as-is.
-    orConditions = [
-      { property: "車牌", title: { equals: search } },
-      { property: "登記人", rich_text: { equals: search } },
-    ];
-    if (searchMatchesCarModelOption) {
-      orConditions.push({ property: "車款", select: { equals: search } });
-    }
-    filter = { or: orConditions };
-    // ===== END EXACT MATCH & SINGLE RESULT LIMIT FOR SECURITY =====
+    // Only an exact match qualifies — on the plate (ignoring hyphens on
+    // both sides) or an exact match on registrant/car model as typed — and
+    // only the first match is ever returned. TO REVERT TO LOOSE SEARCH:
+    // change the `===`/normalized-equality checks below to `.includes()`.
+    const results = rows.filter((page) => {
+      const props = page.properties;
+      const plate = props["車牌"]?.title?.[0]?.plain_text || "";
+      const registrant = props["登記人"]?.rich_text?.[0]?.plain_text || "";
+      const carModel = props["車款"]?.select?.name || "";
 
-    // Let Notion do the filtering in the cloud — only matching rows come back.
-    const response = await notion.dataSources.query({
-      data_source_id: dataSourceId,
-      filter,
+      return (
+        normalizePlate(plate) === normalizedSearch ||
+        registrant === search ||
+        carModel === search
+      );
     });
 
-    let results = response.results;
-
-    // ===== EXACT MATCH & SINGLE RESULT LIMIT FOR SECURITY =====
-    // Even with an exact filter, Notion can still return more than one row
-    // (e.g. duplicate plates). Force only a single row back to the client.
-    // TO REVERT: delete this block (down to the matching END marker).
-    results = results.slice(0, 1);
+    // Even with an exact filter, more than one row could match (e.g.
+    // duplicate plates). Force only a single row back to the client.
+    // TO REVERT: remove this `.slice(0, 1)`.
+    const limitedResults = results.slice(0, 1);
     // ===== END EXACT MATCH & SINGLE RESULT LIMIT FOR SECURITY =====
 
-    const plates = results.map((page) => {
+    const plates = limitedResults.map((page) => {
       const props = page.properties;
 
       return {
