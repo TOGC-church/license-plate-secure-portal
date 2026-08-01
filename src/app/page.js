@@ -26,39 +26,19 @@ export default function Home() {
       </main>
 
       <footer className="bg-slate-900 text-slate-300 mt-auto">
-        <div className="max-w-5xl mx-auto px-4 sm:px-8 py-12 grid gap-10 sm:grid-cols-2">
-          <div>
-            <h2 className="text-white font-semibold mb-4 text-xs tracking-widest uppercase">Support & Contact</h2>
-            <ul className="space-y-2.5 text-sm">
-              <li className="flex items-center gap-2">
-                <span className="text-slate-500">Administrator:</span>
-                <span className="text-slate-100 font-medium">林孝揚</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-slate-500">Email:</span>
-                <a href="mailto:xyling2007@gmail.com" className="text-blue-400 hover:text-blue-300 hover:underline underline-offset-2">xyling2007@gmail.com</a>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-slate-500">Phone:</span>
-                <span className="text-slate-100">0966649275</span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="sm:text-right sm:flex sm:flex-col sm:items-end">
-            <a
-              href="mailto:xyling2007@gmail.com?subject=Issue Report"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              Report an Issue
-            </a>
-            <p className="text-xs text-slate-500 mt-5 pt-5 border-t border-slate-800 w-full sm:text-right">
-              © {new Date().getFullYear()} License Plate Management. Internal use only.
-            </p>
-          </div>
+        <div className="max-w-5xl mx-auto px-4 sm:px-8 py-12 flex flex-col items-center text-center">
+          <a
+            href="mailto:xyling2007@gmail.com?subject=Issue Report"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Report an Issue
+          </a>
+          <p className="text-xs text-slate-500 mt-5 pt-5 border-t border-slate-800 w-full">
+            © {new Date().getFullYear()} License Plate Management. Internal use only.
+          </p>
         </div>
       </footer>
     </div>
