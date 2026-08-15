@@ -2,6 +2,17 @@
 
 import { useState } from "react";
 
+function maskRegistrant(name) {
+  const characters = Array.from(name || "");
+
+  if (characters.length < 2) {
+    return name;
+  }
+
+  characters[Math.floor(characters.length / 2)] = "O";
+  return characters.join("");
+}
+
 export default function PlatesTable() {
   const [search, setSearch] = useState("");
   const [filtered, setFiltered] = useState([]);
@@ -131,7 +142,9 @@ export default function PlatesTable() {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
-                  <span className="font-medium">{plate.registrant || "—"}</span>
+                  <span className="font-medium">
+                    {plate.registrant ? maskRegistrant(plate.registrant) : "—"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
